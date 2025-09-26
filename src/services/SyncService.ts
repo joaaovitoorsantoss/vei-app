@@ -43,6 +43,7 @@ class SyncService {
   private isProcessing = false;
   private processingSyncIds = new Set<string>(); // IDs sendo processados no momento
   private currentAttemptId: string | null = null; // ID da tentativa atual
+  private isManualSync = false; // Flag para indicar se é sincronização manual
   private listeners: Array<(status: 'syncing' | 'idle' | 'error') => void> = [];
   private syncCallbacks: SyncCallbacks = {};
 
@@ -106,7 +107,7 @@ class SyncService {
     NetInfo.addEventListener(state => {
       if (state.isConnected && state.isInternetReachable && !this.isRunning) {
         console.log('Rede detectada, iniciando sincronização...');
-        this.startSync();
+        this.startSync(false); // Sincronização automática
       } else if (!state.isConnected && this.isRunning) {
         console.log('Rede perdida, parando sincronização...');
         this.stopSync();
@@ -134,7 +135,7 @@ class SyncService {
       // Inicia sincronização se houver rede
       const netInfo = await NetInfo.fetch();
       if (netInfo.isConnected && netInfo.isInternetReachable) {
-        this.startSync();
+        this.startSync(false); // Sincronização automática
       }
 
       return syncItem.id;
@@ -177,14 +178,16 @@ class SyncService {
   }
 
   // Inicia o processo de sincronização
-  startSync() {
+  startSync(isManual: boolean = false) {
     if (this.isRunning) return;
 
     this.isRunning = true;
+    this.isManualSync = isManual;
     this.notifyListeners('syncing');
     
-    // Chama callback de início se configurado
-    this.syncCallbacks.onSyncStart?.();
+    console.log(`Iniciando sincronização ${isManual ? 'MANUAL' : 'AUTOMÁTICA'}`);
+    
+    // NÃO chama callback de início aqui - será chamado no processQueue quando há algo para processar
 
     this.syncInterval = setInterval(async () => {
       await this.processQueue();
@@ -201,6 +204,7 @@ class SyncService {
       this.syncInterval = null;
     }
     this.isRunning = false;
+    this.isManualSync = false; // Reset flag manual
     // Limpa IDs de processamento ao parar (local e global)
     this.processingSyncIds.clear();
     this.cleanupOrphanedProcessingIds(); // Limpa IDs globais também
@@ -233,6 +237,7 @@ class SyncService {
       
       let processedCount = 0;
       let hasErrors = false;
+      let hasStartedProcessing = false; // Flag para controlar se já chamou onSyncStart
 
       for (const item of queue) {
         // Verifica se este item já está sendo processado localmente
@@ -274,6 +279,17 @@ class SyncService {
           console.log(`Item ${item.id} já está sendo processado globalmente, removendo tentativa...`);
           await this.removeSyncAttempt(attemptId);
           continue;
+        }
+
+        // Chama callback de início apenas uma vez quando começar a processar o primeiro item
+        // E apenas se for sincronização manual (não automática)
+        if (!hasStartedProcessing && this.isManualSync) {
+          console.log('Iniciando sincronização MANUAL - chamando callback onSyncStart');
+          this.syncCallbacks.onSyncStart?.();
+          hasStartedProcessing = true;
+        } else if (!hasStartedProcessing) {
+          console.log('Iniciando sincronização AUTOMÁTICA - NÃO chamando callback onSyncStart');
+          hasStartedProcessing = true;
         }
 
         // Marca o ID como sendo processado localmente também
@@ -657,10 +673,12 @@ class SyncService {
     
     if (this.isRunning) {
       console.log('Sincronização já em execução, processando fila...');
+      // Se já está rodando, marca como manual para próximas operações
+      this.isManualSync = true;
       await this.processQueue();
     } else {
-      console.log('Iniciando nova sincronização...');
-      this.startSync();
+      console.log('Iniciando nova sincronização MANUAL...');
+      this.startSync(true); // Sincronização manual
     }
   }
 

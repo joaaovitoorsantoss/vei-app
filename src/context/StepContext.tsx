@@ -1,15 +1,15 @@
 import React, { createContext, useContext, useState } from 'react';
 
 interface StepContextData {
-  currentStep: number;
-  setCurrentStep: (step: number) => void;
+  currentStep: number | string;
+  setCurrentStep: (step: number | string) => void;
   totalSteps: number;
 }
 
 const StepContext = createContext<StepContextData>({} as StepContextData);
 
 export function StepProvider({ children }: { children: React.ReactNode }) {
-  const [currentStep, setCurrentStep] = useState(0);
+  const [currentStep, setCurrentStep] = useState<number | string>(0);
   const totalSteps = 8;
 
   return (

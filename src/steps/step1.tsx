@@ -173,7 +173,7 @@ export default function Step1() {
         </View>
 
         {/* Informações Principais */}
-        <View className="flex-row justify-between mb-6" style={{ marginBottom: 100 + insets.bottom }}>
+        <View className="flex-row justify-between mb-6" style={{ marginBottom: 130 + insets.bottom }}>
           <View className="items-center flex-1">
             <View className="w-12 h-12 rounded-full bg-blue-50 items-center justify-center mb-2">
               <Icon name="check-circle" size={24} color="#004F9F" />
@@ -200,7 +200,7 @@ export default function Step1() {
         {/* Versão do App - Discreta */}
         <View style={{
           position: 'absolute',
-          bottom: insets.bottom + 80,
+          bottom: insets.bottom + 110,
           right: 24,
         }}>
           <Text className="text-xs text-gray-400 opacity-60">
@@ -211,7 +211,7 @@ export default function Step1() {
         {/* Botão Iniciar */}
         <View style={{
           position: 'absolute',
-          bottom: insets.bottom + 16,
+          bottom: insets.bottom + 55,
           left: 24,
           right: 24,
         }}>
@@ -220,7 +220,7 @@ export default function Step1() {
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={{ borderRadius: 12 }}
-            >
+          >
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={() => setCurrentStep(1)}
@@ -233,6 +233,24 @@ export default function Step1() {
               </View>
             </TouchableOpacity>
           </LinearGradient>
+        </View>
+
+        {/* Botão Check-in - Discreto */}
+        <View style={{
+          position: 'absolute',
+          bottom: insets.bottom + 10,
+          left: 24,
+          right: 24,
+        }}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => setCurrentStep('checkin')}
+            className="flex-row items-center justify-center py-3"
+          >
+            <Text className="text-gray-500 text-sm font-medium mr-2 underline">
+              Fazer Check-in
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
     </View>

@@ -12,10 +12,8 @@ import ImagePicker from 'react-native-image-crop-picker';
 import { TextInput } from 'react-native';
 import { Keyboard } from 'react-native';
 import { API_URL } from '@env';
-import Animated, { FadeInDown, withRepeat, withTiming, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
-import { syncService, NetInfo } from '../services/SyncService';
-import { useSyncStatus } from '../hooks/useSyncStatus';
-import { SyncIndicator } from '../components/SyncIndicator';
+import Animated, { FadeInDown, useSharedValue, withSpring } from 'react-native-reanimated';
+import { syncService } from '../services/SyncService';
 
 const STORAGE_KEY = '@vistoria_data';
 
@@ -101,7 +99,6 @@ export default function Step7() {
   }, []);
 
   useEffect(() => {
-    // Configura callbacks do SyncService apenas uma vez
     console.log('Configurando callbacks do SyncService');
     
     syncService.configureForStep7({
@@ -119,7 +116,6 @@ export default function Step7() {
           console.log('Fechando modal de sincronização e navegando...');
           setShowSyncModal(false);
           setSyncStatus('idle');
-          // Navega para step8 após sucesso
           navigateToStep8();
         }, 1500);
       },
@@ -128,23 +124,19 @@ export default function Step7() {
         setSyncStatus('error');
         setSyncMessage(error);
         setCanRetrySync(canRetry || false);
-        // Não fecha o modal automaticamente em caso de erro
       },
       onComplete: () => {
         console.log('Sincronização finalizada');
-        // Atualiza lista de itens pendentes sempre que completar
         updatePendingItems();
       }
     });
 
-    // Cleanup dos callbacks quando o componente for desmontado
     return () => {
       console.log('Limpando callbacks do SyncService');
       syncService.clearSyncCallbacks();
     };
-  }, []); // Array de dependências vazio para executar apenas uma vez
+  }, []); 
 
-  // Função para atualizar lista de itens pendentes
   const updatePendingItems = async () => {
     try {
       const items = await syncService.getPendingItems();
@@ -154,7 +146,6 @@ export default function Step7() {
     }
   };
 
-  // Função para tentar sincronizar manualmente
   const handleManualSync = async () => {
     // Evita múltiplas chamadas simultâneas
     if (syncService.isSyncing() || syncStatus === 'syncing') {
@@ -214,7 +205,6 @@ export default function Step7() {
     }
   };
 
-  // Função para fechar modal de sincronização
   const closeSyncModal = () => {
     setShowSyncModal(false);
     setSyncStatus('idle');
@@ -222,17 +212,15 @@ export default function Step7() {
     setCanRetrySync(false);
   };
 
-  // Função para navegar para o step8 após sincronização completa
   const navigateToStep8 = async () => {
     try {
       const hasPending = await syncService.hasPendingItems();
       
       if (!hasPending) {
         console.log('Todos os itens sincronizados! Navegando para step8...');
-        setCurrentStep(7); // step8
+        setCurrentStep(7); 
       } else {
         console.log('Ainda há itens pendentes, não navegando...');
-        // Mostra mensagem para o usuário
         Alert.alert(
           'Sincronização Pendente',
           'Ainda há itens pendentes para sincronizar. Complete a sincronização antes de continuar.',
@@ -241,7 +229,6 @@ export default function Step7() {
       }
     } catch (error) {
       console.error('Erro ao verificar itens pendentes:', error);
-      // Em caso de erro, permite navegação
       console.log('Erro ao verificar pendências, navegando mesmo assim...');
       setCurrentStep(7);
     }
@@ -253,7 +240,7 @@ export default function Step7() {
       if (!savedData) return;
 
       const parsedData = JSON.parse(savedData);
-      
+
       if (parsedData.observacoes) {
         setObservations(parsedData.observacoes.map((obs: any) => ({
           id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -317,36 +304,17 @@ export default function Step7() {
     }
   };
 
-  // Utility functions for photo handling
   const isValidPhoto = (uri: string): boolean => {
-    // Aceita file:// para fotos locais
     if (uri.startsWith('file://')) return true;
     
     try {
-      // Tenta criar um objeto URL para validar
       const url = new URL(uri);
-      // Aceita apenas HTTPS
       if (url.protocol !== 'https:') return false;
-      // Aceita apenas domínios específicos
       return url.hostname.endsWith('happymobi.com.br') || 
              url.hostname.endsWith('clemar.com.br');
     } catch {
       return false;
     }
-  };
-
-  const retry = async (fn: () => Promise<any>, maxTries = 3, delay = 1500): Promise<any> => {
-    let attempt = 0;
-    while (attempt < maxTries) {
-      try {
-        return await fn();
-      } catch (err) {
-        attempt++;
-        if (attempt >= maxTries) throw err;
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-    }
-    throw new Error('Max retries exceeded');
   };
 
   const uploadImages = async (images: { uri: string; type: string; name: string }[]): Promise<{ [key: string]: string }> => {
@@ -472,7 +440,6 @@ export default function Step7() {
   };
 
   const handleSubmit = async () => {
-    // Validate all photos before submission
     const invalidPhotos = photos.filter(photo => photo.photo && !isValidPhoto(photo.photo));
     if (invalidPhotos.length > 0) {
       Alert.alert(
@@ -530,7 +497,6 @@ export default function Step7() {
         }
       });
 
-      // Initialize upload progress
       setPhotoUploadProgress({
         total: imagesToUpload.length,
         completed: 0,
@@ -541,7 +507,6 @@ export default function Step7() {
         }))
       });
 
-      // Upload images if any
       let uploadedUrls: { [key: string]: string } = {};
       let uploadSuccess = false;
       
@@ -550,7 +515,6 @@ export default function Step7() {
           uploadedUrls = await uploadImages(imagesToUpload);
           progressValue.value = withSpring(0.5);
           
-          // Update progress
           setPhotoUploadProgress(prev => ({
             ...prev,
             completed: prev.total,
@@ -564,7 +528,6 @@ export default function Step7() {
         } catch (error) {
           console.error('Erro no upload das imagens:', error);
           
-          // Determina a mensagem de erro apropriada
           let errorMessage = 'Erro desconhecido ao fazer upload';
           if (error instanceof Error) {
             if (error.message.includes('conexão') || error.message.includes('internet')) {
@@ -582,7 +545,6 @@ export default function Step7() {
             index === 0 ? { ...step, status: 'error', message: errorMessage } : step
           ));
           
-          // Update progress with error
           setPhotoUploadProgress(prev => ({
             ...prev,
             failed: prev.total - prev.completed,
@@ -593,16 +555,13 @@ export default function Step7() {
             }))
           }));
           
-          // Não continua se o upload falhou
           setSubmitting(false);
           return;
         }
       } else {
-        // Se não há imagens para upload, considera sucesso
         console.log('Nenhuma imagem para upload - pulando etapa');
         uploadSuccess = true;
         
-        // Atualiza o progresso para mostrar que não há imagens
         setPhotoUploadProgress({
           total: 0,
           completed: 0,
@@ -611,25 +570,21 @@ export default function Step7() {
         });
       }
 
-      // Só continua se o upload foi bem-sucedido
       if (!uploadSuccess) {
         setSubmitting(false);
         return;
       }
 
-      // Aguarda 1 segundo antes de mostrar o próximo passo
       await new Promise(resolve => setTimeout(resolve, 1000));
       setLoadingSteps(steps => steps.map((step, index) => 
         index === 0 ? { ...step, status: 'completed' } : step
       ));
       setCurrentLoadingStep(1);
 
-      // 2. Enviando dados da vistoria
       setLoadingSteps(steps => steps.map((step, index) => 
         index === 1 ? { ...step, status: 'loading' } : step
       ));
 
-      // Atualiza as observações com as novas URLs
       const observacoesFormatadas = observations.map((obs, index) => {
         if (obs.photo.startsWith('file://')) {
           const newUrl = uploadedUrls[`observation_${index}`] || obs.photo;
@@ -703,13 +658,11 @@ export default function Step7() {
 
       progressValue.value = withSpring(1);
 
-      // Aguarda 1 segundo antes de mostrar o próximo passo
       await new Promise(resolve => setTimeout(resolve, 1000));
       setLoadingSteps(steps => steps.map((step, index) => 
         index === 1 ? { ...step, status: 'completed' } : step
       ));
 
-      // Aguarda mais 1 segundo antes de fechar o modal
       await new Promise(resolve => setTimeout(resolve, 1000));
       setShowLoadingModal(false);
       // clearVistoriaData();
@@ -722,15 +675,12 @@ export default function Step7() {
         step.status === 'loading' ? { ...step, status: 'error', message: errorMessage } : step
       ));
       
-      // Adiciona à fila de sincronização para tentar novamente automaticamente
       try {
-        // Atualiza as observações com URLs locais (file://) para sincronização posterior
         const observacoesFormatadas = observations.map(obs => ({
           texto: obs.text,
           foto: obs.photo
         }));
 
-        // Fotos principais também podem ter URLs locais
         const fotosAtualizadas = { ...vistoriaData.fotos };
 
         const newData = {
@@ -744,7 +694,6 @@ export default function Step7() {
         const syncId = await syncService.addToQueue(newData);
         console.log('Dados adicionados à fila de sincronização com ID:', syncId);
         
-        // Atualiza lista de itens pendentes
         await updatePendingItems();
         
         Alert.alert(
@@ -1127,8 +1076,6 @@ export default function Step7() {
     setObservations(prev => prev.filter(obs => obs.id !== id));
   };
 
-
-
   return (
     <View className="flex-1 bg-white">
       <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 18 + insets.top, paddingBottom: 100 + insets.bottom }}>
@@ -1299,7 +1246,6 @@ export default function Step7() {
                       </View>
                     ))}
                     
-                    {/* Botão Adicionar quando já existem observações */}
                     <TouchableOpacity
                       onPress={handleAddObservation}
                       className="flex-row items-center justify-center py-3 bg-orange-50 rounded-lg mt-2"

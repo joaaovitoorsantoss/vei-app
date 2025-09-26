@@ -1,6 +1,6 @@
 import { View, Text, TouchableOpacity, ScrollView, Dimensions, Alert, ActivityIndicator, PanResponder, Animated } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useStep } from '../context/StepContext';
 import { useVistoria, VistoriaData } from '../context/VistoriaContext';
 import { StepIndicator } from '../components/StepIndicator';
@@ -29,7 +29,7 @@ export default function Step4() {
     {
       id: '1',
       name: 'Limpeza',
-      icon: 'cleaning-services',
+      icon: 'car-wash',
       description: 'Avalie a limpeza do veículo',
       rating: 0,
       apiKey: 'limpeza'
@@ -37,7 +37,7 @@ export default function Step4() {
     {
       id: '2',
       name: 'Manutenção',
-      icon: 'build',
+      icon: 'wrench',
       description: 'Avalie a manutenção',
       rating: 0,
       apiKey: 'manutencao'
@@ -53,7 +53,7 @@ export default function Step4() {
     {
       id: '4',
       name: 'Vidros',
-      icon: 'window',
+      icon: 'window-closed',
       description: 'Avalie o estado dos vidros',
       rating: 0,
       apiKey: 'vidros'
@@ -61,7 +61,7 @@ export default function Step4() {
     {
       id: '5',
       name: 'Estofados',
-      icon: 'chair',
+      icon: 'car-seat',
       description: 'Verifique o estado dos estofados',
       rating: 0,
       apiKey: 'estofados'
@@ -69,7 +69,7 @@ export default function Step4() {
     {
       id: '9',
       name: 'Retrovisores',
-      icon: 'visibility',
+      icon: 'mirror',
       description: 'Verifique o estado dos retrovisores',
       rating: 0,
       apiKey: 'retrovisores'
@@ -218,7 +218,7 @@ export default function Step4() {
             Avalie o estado geral do veículo
           </Text>
           <View className="flex-row items-center bg-blue-50 px-4 py-2 rounded-full mt-2">
-            <Icon name="info" size={20} color="#004F9F" />
+            <Icon name="information" size={20} color="#004F9F" />
             <Text className="text-blue-600 ml-2 font-medium">
               Toque nas estrelas para avaliar cada item
             </Text>
@@ -260,7 +260,7 @@ export default function Step4() {
                         activeOpacity={0.7}
                       >
                         <Icon
-                          name={star <= item.rating ? 'star' : 'star-border'}
+                          name={star <= item.rating ? 'star' : 'star-outline'}
                           size={28}
                           color={star <= item.rating ? getRatingColor(item.rating) : '#D1D5DB'}
                         />

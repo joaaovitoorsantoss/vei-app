@@ -14,6 +14,7 @@ import Step5 from './src/steps/step5';
 import Step6 from './src/steps/step6';
 import Step7 from './src/steps/step7';
 import Step8 from './src/steps/step8';
+import CheckIn from './src/steps/checkin';
 function AppContent() {
   const { currentStep } = useStep();
   const [isLoading, setIsLoading] = useState(true);
@@ -46,6 +47,8 @@ function AppContent() {
         return <Step7 />;
       case 7:
         return <Step8 />;
+      case 'checkin':
+        return <CheckIn />;
       default:
         return <Step1 />;
     }

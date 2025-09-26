@@ -397,7 +397,7 @@ export default function Step2() {
                   className="flex-1 text-base text-gray-900"
                   placeholder="Digite sua matrícula"
                   placeholderTextColor="#9CA3AF"
-                  value={vistoriaData?.matricula?.toString() || ''}
+                  value={finalMatricula}
                   onChangeText={handleMatriculaChange}
                   onSubmitEditing={handleMatriculaSubmit}
                   onBlur={() => setIsUserTyping(false)}

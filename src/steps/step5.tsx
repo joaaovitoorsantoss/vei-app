@@ -1,13 +1,14 @@
-import { View, Text, TouchableOpacity, ScrollView, Dimensions, Alert, ActivityIndicator, PanResponder, Animated, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useStep } from '../context/StepContext';
 import { useVistoria, VistoriaData } from '../context/VistoriaContext';
 import { StepIndicator } from '../components/StepIndicator';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React from 'react';
+
 const STORAGE_KEY = '@vistoria_data';
 
 type Rating = 'nao_avaliado' | 'conforme' | 'nao_conforme';
@@ -34,7 +35,7 @@ export default function Step5() {
     {
       id: '1',
       name: 'Pneus Dianteiros',
-      icon: 'tire-repair',
+      icon: 'tire',
       description: 'Verifique o estado dos pneus dianteiros',
       rating: 'nao_avaliado',
       apiKey: 'pneus_dianteiros',
@@ -43,7 +44,7 @@ export default function Step5() {
     {
       id: '2',
       name: 'Pneus Traseiros',
-      icon: 'tire-repair',
+      icon: 'tire',
       description: 'Verifique o estado dos pneus traseiros',
       rating: 'nao_avaliado',
       apiKey: 'pneus_traseiros',
@@ -52,7 +53,7 @@ export default function Step5() {
     {
       id: '3',
       name: 'Pneu Estepe',
-      icon: 'tire-repair',
+      icon: 'tire',
       description: 'Verifique o estado do pneu estepe',
       rating: 'nao_avaliado',
       apiKey: 'pneu_estepe',
@@ -61,7 +62,7 @@ export default function Step5() {
     {
       id: '4',
       name: 'Faróis',
-      icon: 'lightbulb',
+      icon: 'car-light-high',
       description: 'Verifique o funcionamento dos faróis',
       rating: 'nao_avaliado',
       apiKey: 'farois',
@@ -70,7 +71,7 @@ export default function Step5() {
     {
       id: '5',
       name: 'Lanternas',
-      icon: 'lightbulb-outline',
+      icon: 'car-parking-lights',
       description: 'Verifique o funcionamento das lanternas',
       rating: 'nao_avaliado',
       apiKey: 'lanternas',
@@ -79,7 +80,7 @@ export default function Step5() {
     {
       id: '6',
       name: 'Luz de Freio',
-      icon: 'lightbulb',
+      icon: 'car-brake-alert',
       description: 'Verifique o funcionamento da luz de freio',
       rating: 'nao_avaliado',
       apiKey: 'luz_freio',
@@ -88,7 +89,7 @@ export default function Step5() {
     {
       id: '7',
       name: 'Piscas',
-      icon: 'flash-on',
+      icon: 'car-light-dimmed',
       description: 'Verifique o funcionamento dos piscas',
       rating: 'nao_avaliado',
       apiKey: 'piscas',
@@ -97,7 +98,7 @@ export default function Step5() {
     {
       id: '8',
       name: 'Óleo do Motor',
-      icon: 'oil-barrel',
+      icon: 'oil',
       description: 'Verifique o nível do óleo do motor',
       rating: 'nao_avaliado',
       apiKey: 'oleo_motor',
@@ -106,7 +107,7 @@ export default function Step5() {
     {
       id: '9',
       name: 'Água do Radiador',
-      icon: 'water-drop',
+      icon: 'water',
       description: 'Verifique o nível da água do radiador',
       rating: 'nao_avaliado',
       apiKey: 'agua_radiador',
@@ -115,7 +116,7 @@ export default function Step5() {
     {
       id: '10',
       name: 'Óleo do Freio',
-      icon: 'oil-barrel',
+      icon: 'oil',
       description: 'Verifique o nível do óleo do freio',
       rating: 'nao_avaliado',
       apiKey: 'oleo_freio',
@@ -260,13 +261,13 @@ export default function Step5() {
   const getCategoryIcon = (category: string) => {
     switch (category) {
       case 'Pneus':
-        return 'tire-repair';
+        return 'tire';
       case 'Luzes':
-        return 'lightbulb';
+        return 'lightbulb-on';
       case 'Fluidos':
-        return 'oil-barrel';
+        return 'oil';
       default:
-        return 'info';
+        return 'information';
     }
   };
 
@@ -305,7 +306,7 @@ export default function Step5() {
             Verifique cada item do veículo e marque seu estado
           </Text>
           <View className="flex-row items-center bg-blue-50 px-4 py-2 rounded-full mt-2">
-            <Icon name="info" size={20} color="#004F9F" />
+            <Icon name="information" size={20} color="#004F9F" />
             <Text className="text-blue-600 ml-2 font-medium">
               Selecione o estado de cada item
             </Text>
@@ -333,7 +334,7 @@ export default function Step5() {
                   </View>
                 </View>
                 <Icon
-                  name={expandedCategories[category] ? "expand-less" : "expand-more"} 
+                  name={expandedCategories[category] ? "chevron-up" : "chevron-down"} 
                   size={24}
                   color="#6B7280"
                 />
@@ -378,7 +379,7 @@ export default function Step5() {
                             }`}
                           >
                             <Icon 
-                              name="cancel" 
+                              name="close-circle" 
                               size={24} 
                               color={item.rating === 'nao_conforme' ? '#EF4444' : '#9CA3AF'} 
                             />
