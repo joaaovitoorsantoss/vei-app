@@ -8,7 +8,10 @@ import {
     Alert,
     ActivityIndicator,
     Image,
-    Dimensions
+    Dimensions,
+    Modal,
+    FlatList,
+    Keyboard,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -61,13 +64,25 @@ export default function CheckIn() {
     const [exibindoNome, setExibindoNome] = useState(false);
     const [verificandoMatricula, setVerificandoMatricula] = useState(false);
     const [matriculaTimeout, setMatriculaTimeout] = useState<NodeJS.Timeout | null>(null);
+    
+    // Estados para o modal e busca de frota
+    const [showFrotaModal, setShowFrotaModal] = useState(false);
+    const [frotas, setFrotas] = useState<Veiculo[]>([]);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchingFrotas, setSearchingFrotas] = useState(false);
+    const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
+    const [hasMore, setHasMore] = useState(true);
 
     useEffect(() => {
         fetchVeiculos();
+        loadFrotas(true, ''); // Carrega as frotas inicialmente
 
         return () => {
             if (matriculaTimeout) {
                 clearTimeout(matriculaTimeout);
+            }
+            if (searchTimeout) {
+                clearTimeout(searchTimeout);
             }
         };
     }, []);
@@ -76,10 +91,65 @@ export default function CheckIn() {
         try {
             const response = await axios.get(`${API_URL}/frota`);
             setVeiculos(response.data);
+            setFrotas(response.data); // Também inicializa a lista para o modal
         } catch (error) {
             console.error('Erro ao carregar veículos:', error);
             Alert.alert('Erro', 'Erro ao carregar veículos. Tente novamente.');
         }
+    };
+
+    // Função para carregar frotas com paginação e busca
+    const loadFrotas = async (reset = false, query = '') => {
+        // Se não há query e já temos dados dos veículos, use os dados existentes
+        if (!query && reset && veiculos.length > 0) {
+            setFrotas(veiculos);
+            setHasMore(false);
+            setSearchingFrotas(false);
+            return;
+        }
+
+        try {
+            setSearchingFrotas(true);
+            if (reset) setLoading(true);
+            
+            const response = await axios.get(`${API_URL}/frota`, {
+                params: {
+                    search: query,
+                    page: reset ? 1 : Math.floor(frotas.length / 20) + 1,
+                    limit: 20
+                }
+            });
+            
+            const newFrotas = response.data;
+            
+            if (reset) {
+                setFrotas(newFrotas);
+            } else {
+                setFrotas(prev => [...prev, ...newFrotas]);
+            }
+            
+            setHasMore(newFrotas.length === 20);
+        } catch (error) {
+            console.error('Erro ao carregar frotas:', error);
+            Alert.alert('Erro', 'Erro ao carregar frotas. Tente novamente.');
+        } finally {
+            setLoading(false);
+            setSearchingFrotas(false);
+        }
+    };
+
+    // Função de busca com debounce
+    const debouncedSearch = (query: string) => {
+        if (searchTimeout) {
+            clearTimeout(searchTimeout);
+        }
+        
+        setSearchingFrotas(true);
+        const timeout = setTimeout(() => {
+            loadFrotas(true, query);
+        }, 500);
+        
+        setSearchTimeout(timeout);
     };
 
     const resetForm = () => {
@@ -268,13 +338,6 @@ export default function CheckIn() {
             case 1:
                 return (
                     <>
-                        <View>
-                            <Image
-                                source={require('../../assets/logo.png')}
-                                className="w-32 h-32"
-                                resizeMode="contain"
-                            />
-                        </View>
                         <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
                             <View className="space-y-6 p-4">
                                 <View className="flex-row items-center space-x-2 mb-4">
@@ -325,16 +388,16 @@ export default function CheckIn() {
                     <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
                         <View className="p-4">
                             <Text className="text-xl font-semibold text-gray-900 mb-6">Escolha o tipo de registro</Text>
-                            <View className="space-y-4">
+                            <View className="gap-4">
                                 <TouchableOpacity
                                     onPress={() => setTipoVistoria('retirada')}
                                     className={`p-4 rounded-lg border-2 ${tipoVistoria === 'retirada'
-                                        ? 'border-blue-600 bg-blue-50'
+                                        ? 'border-[#004F9F] bg-blue-50'
                                         : 'border-gray-200'
                                         }`}
                                 >
                                     <View className="items-center space-y-3">
-                                        <View className={`w-12 h-12 rounded-full items-center justify-center ${tipoVistoria === 'retirada' ? 'bg-blue-600' : 'bg-gray-200'
+                                        <View className={`w-12 h-12 rounded-full items-center justify-center ${tipoVistoria === 'retirada' ? 'bg-[#004F9F]' : 'bg-gray-200'
                                             }`}>
                                             <Icon
                                                 name="car"
@@ -352,13 +415,12 @@ export default function CheckIn() {
                                 <TouchableOpacity
                                     onPress={() => setTipoVistoria('devolucao')}
                                     className={`p-4 rounded-lg border-2 ${tipoVistoria === 'devolucao'
-                                        ? 'border-blue-600 bg-blue-50'
+                                        ? 'border-[#004F9F] bg-blue-50'
                                         : 'border-gray-200'
                                         }`}
                                 >
                                     <View className="items-center space-y-3">
-                                        <View className={`w-12 h-12 rounded-full items-center justify-center ${tipoVistoria === 'devolucao' ? 'bg-blue-600' : 'bg-gray-200'
-                                            }`}>
+                                        <View className={`w-12 h-12 rounded-full items-center justify-center ${tipoVistoria === 'devolucao' ? 'bg-[#004F9F]' : 'bg-gray-200'}`}>
                                             <Icon
                                                 name="car"
                                                 size={24}
@@ -384,16 +446,19 @@ export default function CheckIn() {
 
                             {/* Matrícula */}
                             <View className="space-y-2">
-                                <Text className="text-sm font-medium text-gray-700">Matrícula</Text>
-                                <View className="flex-row items-center bg-gray-50 rounded-lg border border-gray-300 px-3">
-                                    <Icon name="account" size={20} color="#6B7280" />
+                                <Text className="text-sm font-medium text-gray-700 mb-2">Matrícula</Text>
+                                <View className="flex-row items-center border border-gray-200 rounded-xl px-4 py-3 bg-white">
+                                    <View className='w-10 h-10 rounded-full bg-blue-50 items-center justify-center mr-3'>
+                                        <Icon name="badge-account" size={20} color="#004F9F" />
+                                    </View>
                                     <TextInput
-                                        className="flex-1 p-3 text-base text-gray-900"
+                                        className="flex-1 text-base text-gray-900"
                                         value={exibindoNome ? colaborador : matriculaDigitada}
                                         onChangeText={handleMatriculaChange}
                                         placeholder="Insira o número de sua matrícula"
                                         placeholderTextColor="#9CA3AF"
                                         editable={!exibindoNome}
+                                        keyboardType='numeric'
                                     />
                                     {verificandoMatricula && (
                                         <ActivityIndicator size="small" color="#004F9F" />
@@ -401,52 +466,45 @@ export default function CheckIn() {
                                 </View>
                             </View>
 
-                            {/* Veículo */}
-                            <View className="space-y-2">
-                                <Text className="text-sm font-medium text-gray-700">Frota</Text>
-                                <View className="bg-gray-50 rounded-lg border border-gray-300">
-                                    {selectedVeiculo ? (
-                                        <TouchableOpacity
-                                            onPress={() => setSelectedVeiculo(null)}
-                                            className="flex-row items-center justify-between p-3"
-                                            disabled={!exibindoNome || !colaborador}
-                                        >
-                                            <View className="flex-row items-center">
-                                                <Icon name="car" size={20} color="#004F9F" />
-                                                <Text className="ml-3 text-base text-gray-900">
-                                                    {selectedVeiculo.id} {selectedVeiculo.modelo} - {selectedVeiculo.placa}
-                                                </Text>
-                                            </View>
-                                            <Icon name="close" size={20} color="#6B7280" />
-                                        </TouchableOpacity>
-                                    ) : (
-                                        <ScrollView
-                                            className="max-h-40"
-                                            showsVerticalScrollIndicator={true}
-                                        >
-                                            {veiculos.map((veiculo) => (
-                                                <TouchableOpacity
-                                                    key={veiculo.id}
-                                                    onPress={() => setSelectedVeiculo(veiculo)}
-                                                    className="flex-row items-center p-3 border-b border-gray-200"
-                                                    disabled={!exibindoNome || !colaborador}
-                                                >
-                                                    <Icon name="car" size={20} color="#6B7280" />
-                                                    <Text className="ml-3 text-base text-gray-900">
-                                                        {veiculo.id} {veiculo.modelo} - {veiculo.placa}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            ))}
-                                        </ScrollView>
-                                    )}
-                                </View>
+                            {/* Frota */}
+                            <View className="mb-4">
+                                <Text className="text-sm font-medium text-gray-700 mb-2">Frota</Text>
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        setShowFrotaModal(true);
+                                        Keyboard.dismiss();
+                                    }}
+                                    className="flex-row items-center border border-gray-200 rounded-xl px-4 py-3 bg-white"
+                                    disabled={!exibindoNome || !colaborador}
+                                >
+                                    <View className="w-10 h-10 rounded-full bg-blue-50 items-center justify-center mr-3">
+                                        <Icon name="car" size={20} color="#004F9F" />
+                                    </View>
+                                    <View className="flex-1 justify-center min-h-[24px]">
+                                        <Text className={`text-base ${selectedVeiculo ? 'text-gray-900' : 'text-gray-400'}`}>
+                                            {selectedVeiculo ? `${selectedVeiculo.id}` : 'Selecione uma frota'}
+                                        </Text>
+                                        {selectedVeiculo ? (
+                                            <Text className="text-sm text-gray-500">
+                                                {selectedVeiculo.placa} - {selectedVeiculo.modelo?.toUpperCase()}
+                                            </Text>
+                                        ) : (
+                                            <Text className="text-sm text-gray-500">
+                                                Toque para selecionar a frota
+                                            </Text>
+                                        )}
+                                    </View>
+                                    <Icon name="chevron-down" size={24} color="#6B7280" />
+                                </TouchableOpacity>
                             </View>
 
                             {/* Quilometragem */}
                             <View className="space-y-2">
-                                <Text className="text-sm font-medium text-gray-700">Quilometragem</Text>
-                                <View className="flex-row items-center bg-gray-50 rounded-lg border border-gray-300 px-3">
-                                    <Icon name="speedometer" size={20} color="#6B7280" />
+                                <Text className="text-sm font-medium text-gray-700 mb-2">Quilometragem</Text>
+                                <View className="flex-row items-center border border-gray-200 rounded-xl px-4 py-3 bg-white">
+                                    <View className="w-10 h-10 rounded-full bg-blue-50 items-center justify-center mr-3">
+                                        <Icon name="speedometer" size={20} color="#004F9F" />
+                                    </View>
                                     <TextInput
                                         className="flex-1 p-3 text-base text-gray-900"
                                         value={quilometragem}
@@ -587,29 +645,26 @@ export default function CheckIn() {
                 {renderStep()}
             </View>
 
-            {/* Bottom Buttons */}
             {!success && (
                 <View
                     className="bg-white border-t border-gray-200 p-4"
                     style={{ paddingBottom: insets.bottom + 16 }}
                 >
-                    <View className="flex-row justify-between items-center">
+                    <View className={`flex-row gap-2 ${currentStep === 1 ? 'justify-center' : 'justify-between'}`}>
                         {currentStep > 1 && (
                             <TouchableOpacity
                                 onPress={() => setCurrentCheckStep(currentStep - 1)}
-                                className="flex-row items-center space-x-2 px-4 py-2"
+                                className="flex-1 flex-row items-center justify-center "
                             >
                                 <Icon name="chevron-left" size={16} color="#6B7280" />
                                 <Text className="text-gray-600">Voltar</Text>
                             </TouchableOpacity>
                         )}
 
-                        <View className="flex-1" />
-
                         {currentStep === 1 ? (
                             <TouchableOpacity
                                 onPress={handleNextStep}
-                                className="w-full flex-row flex items-center justify-center space-x-2 px-6 py-3 bg-[#004F9F] text-white rounded-lg font-medium hover:bg-[#003F7F] transition-colors"
+                                className="w-full justify-center items-center px-6 py-3 bg-[#004F9F] rounded-lg font-medium hover:bg-[#003F7F] transition-colors"
                             >
                                 <Text className="text-white font-medium mr-2">Iniciar</Text>
                                 <Icon name="chevron-right" size={16} color="white" />
@@ -617,7 +672,7 @@ export default function CheckIn() {
                         ) : currentStep < 4 ? (
                             <TouchableOpacity
                                 onPress={handleNextStep}
-                                className="bg-[#004F9F] px-6 py-3 rounded-lg flex-row items-center"
+                                className="flex-1 justify-center items-center bg-[#004F9F] px-6 py-3 rounded-lg flex-row text-white font-medium hover:bg-[#003F7F] transition-colors"
                             >
                                 <Text className="text-white font-medium mr-2">Próximo</Text>
                                 <Icon name="chevron-right" size={16} color="white" />
@@ -626,8 +681,7 @@ export default function CheckIn() {
                             <TouchableOpacity
                                 onPress={handleSubmit}
                                 disabled={loading}
-                                className={`bg-[#004F9F] px-6 py-3 rounded-lg flex-row items-center ${loading ? 'opacity-50' : ''
-                                    }`}
+                                className={`flex-1 justify-center items-center bg-[#004F9F] px-6 py-3 rounded-lg flex-row ${loading ? 'opacity-50' : ''}`}
                             >
                                 {loading ? (
                                     <ActivityIndicator size="small" color="white" />
@@ -639,6 +693,101 @@ export default function CheckIn() {
                     </View>
                 </View>
             )}
+
+            <Modal visible={showFrotaModal} transparent animationType="slide" onRequestClose={() => setShowFrotaModal(false)}>
+                <View className="flex-1 bg-black/50 justify-end">
+                    <TouchableOpacity
+                        activeOpacity={1}
+                        onPress={(e) => e.stopPropagation()}
+                        className="bg-white rounded-t-3xl p-6 h-[80%]"
+                    >
+                        <View className="flex-row justify-between items-center mb-4">
+                            <Text className="text-xl font-bold text-gray-900">Selecione a Frota</Text>
+                            <View className="flex-row items-center gap-2">
+                                <TouchableOpacity onPress={() => loadFrotas(true, searchQuery)} disabled={loading}>
+                                    {loading ? (
+                                        <ActivityIndicator size="large" color="#004F9F" />
+                                    ) : (
+                                        <Icon name="refresh" size={24} color={loading ? "#9CA3AF" : "#004F9F"} />
+                                    )}
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => setShowFrotaModal(false)}>
+                                    <Icon name="close" size={24} color="#6B7280" />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        <View className="flex-row items-center border border-gray-200 rounded-xl px-4 py-3 bg-white mb-4">
+                            <Icon name="search" size={20} color="#6B7280" style={{ marginRight: 12 }} />
+                            <TextInput
+                                className="flex-1 text-base text-gray-900"
+                                placeholder="Pesquisar por frota, modelo ou placa..."
+                                placeholderTextColor="#9CA3AF"
+                                value={searchQuery}
+                                onChangeText={(text) => {
+                                    setSearchQuery(text);
+                                    debouncedSearch(text);
+                                }}
+                            />
+                            {searchQuery.length > 0 && (
+                                <TouchableOpacity onPress={() => {
+                                    setSearchQuery('');
+                                    setSearchingFrotas(false);
+                                    if (searchTimeout) clearTimeout(searchTimeout);
+                                    loadFrotas(true, '');
+                                }}>
+                                    <Icon name="close" size={20} color="#6B7280" />
+                                </TouchableOpacity>
+                            )}
+                        </View>
+
+                        {searchingFrotas ? (
+                            <View className="items-center py-8">
+                                <ActivityIndicator size="large" color="#004F9F" />
+                                <Text className="text-gray-500 mt-2">Pesquisando...</Text>
+                            </View>
+                        ) : (
+                            <FlatList
+                                data={frotas}
+                                keyExtractor={(item, index) => item.id.toString()}
+                                renderItem={({ item }) => (
+                                    <TouchableOpacity
+                                        onPress={() => {
+                                            setSelectedVeiculo(item);
+                                            setShowFrotaModal(false);
+                                            setSearchQuery('');
+                                            Keyboard.dismiss();
+                                        }}
+                                        className="py-4 border-b border-gray-100"
+                                    >
+                                        <View className="flex-row items-center justify-between">
+                                            <View>
+                                                <Text className="text-base font-medium text-gray-900">
+                                                    {item.id} - {item.modelo.toUpperCase()}
+                                                </Text>
+                                                <Text className="text-sm text-gray-500">{item.placa}</Text>
+                                            </View>
+                                            {selectedVeiculo?.id === item.id && <Icon name="check-circle" size={24} color="#10B981" />}
+                                        </View>
+                                    </TouchableOpacity>
+                                )}
+                                ListEmptyComponent={
+                                    <View className="items-center py-8">
+                                        <Icon name="car-off" size={48} color="#9CA3AF" />
+                                        <Text className="text-center text-gray-500 mt-2">
+                                            {searchQuery ? 'Nenhuma frota encontrada para a pesquisa' : 'Nenhuma frota disponível'}
+                                        </Text>
+                                    </View>
+                                }
+                                keyboardShouldPersistTaps="handled"
+                                keyboardDismissMode="none"
+                                onEndReached={() => { if (hasMore && !searchingFrotas) loadFrotas(false, searchQuery); }}
+                                onEndReachedThreshold={0.3}
+                            />
+                        )}
+                    </TouchableOpacity>
+                </View>
+            </Modal>
         </View>
     );
 }

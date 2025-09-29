@@ -293,7 +293,7 @@ export default function Step5() {
             <Icon name="chevron-left" size={24} color="#6B7280" />
           </TouchableOpacity>
           <View className="absolute left-1/2 -translate-x-1/2">
-            <StepIndicator currentStep={currentStep} totalSteps={6} />
+            <StepIndicator currentStep={Number(currentStep)} totalSteps={6} />
           </View>
         </View>
 
