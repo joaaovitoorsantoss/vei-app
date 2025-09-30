@@ -1,6 +1,6 @@
 {
   "name": "VEIV2",
-  "version": "1.7.9",
+  "version": "1.8.2",
   "private": true,
   "scripts": {
     "android": "react-native run-android",

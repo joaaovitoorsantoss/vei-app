@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -12,6 +12,8 @@ import {
     Modal,
     FlatList,
     Keyboard,
+    KeyboardAvoidingView,
+    Platform
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -20,8 +22,6 @@ import { StepIndicator } from '../components/StepIndicator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import axios from 'axios';
 import { API_URL } from '@env';
-
-const { width } = Dimensions.get('window');
 
 interface Veiculo {
     id: number;
@@ -48,7 +48,6 @@ interface VistoriaRapida {
 export default function CheckIn() {
     const { setCurrentStep } = useStep();
     const insets = useSafeAreaInsets();
-
     const [currentStep, setCurrentCheckStep] = useState(1);
     const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
     const [selectedVeiculo, setSelectedVeiculo] = useState<Veiculo | null>(null);
@@ -64,18 +63,18 @@ export default function CheckIn() {
     const [exibindoNome, setExibindoNome] = useState(false);
     const [verificandoMatricula, setVerificandoMatricula] = useState(false);
     const [matriculaTimeout, setMatriculaTimeout] = useState<NodeJS.Timeout | null>(null);
-    
-    // Estados para o modal e busca de frota
+    const scrollViewRef = useRef<ScrollView>(null);
     const [showFrotaModal, setShowFrotaModal] = useState(false);
     const [frotas, setFrotas] = useState<Veiculo[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [searchingFrotas, setSearchingFrotas] = useState(false);
     const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
     const [hasMore, setHasMore] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [page, setPage] = useState(1);
 
     useEffect(() => {
-        fetchVeiculos();
-        loadFrotas(true, ''); // Carrega as frotas inicialmente
+        loadFrotas(true, '');
 
         return () => {
             if (matriculaTimeout) {
@@ -87,68 +86,61 @@ export default function CheckIn() {
         };
     }, []);
 
-    const fetchVeiculos = async () => {
-        try {
-            const response = await axios.get(`${API_URL}/frota`);
-            setVeiculos(response.data);
-            setFrotas(response.data); // Também inicializa a lista para o modal
-        } catch (error) {
-            console.error('Erro ao carregar veículos:', error);
-            Alert.alert('Erro', 'Erro ao carregar veículos. Tente novamente.');
-        }
-    };
-
-    // Função para carregar frotas com paginação e busca
     const loadFrotas = async (reset = false, query = '') => {
-        // Se não há query e já temos dados dos veículos, use os dados existentes
-        if (!query && reset && veiculos.length > 0) {
-            setFrotas(veiculos);
-            setHasMore(false);
-            setSearchingFrotas(false);
-            return;
+        if (loading || loadingMore) return;
+
+        if (reset) {
+            setPage(1);
+            setHasMore(true);
+            setLoading(true);
+            setSearchingFrotas(true);
+        } else {
+            setLoadingMore(true);
         }
 
         try {
-            setSearchingFrotas(true);
-            if (reset) setLoading(true);
-            
-            const response = await axios.get(`${API_URL}/frota`, {
+            const response = await axios.get(`${API_URL}/frota/paginated`, {
                 params: {
-                    search: query,
-                    page: reset ? 1 : Math.floor(frotas.length / 20) + 1,
-                    limit: 20
-                }
+                    page: reset ? 1 : page,
+                    limit: 10,
+                    search: query || undefined
+                },
             });
-            
-            const newFrotas = response.data;
-            
-            if (reset) {
-                setFrotas(newFrotas);
+
+            const newFrotas = response.data.veiculos || response.data;
+
+            setFrotas((prev) => {
+                if (reset) return newFrotas;
+                return [...prev, ...newFrotas.filter((n: any) => !prev.some((p) => p.id === n.id))];
+            });
+
+            if (page >= (response.data.totalPages || 1) || newFrotas.length === 0) {
+                setHasMore(false);
+            } else if (reset) {
+                setPage(2);
             } else {
-                setFrotas(prev => [...prev, ...newFrotas]);
+                setPage((prev) => prev + 1);
             }
-            
-            setHasMore(newFrotas.length === 20);
         } catch (error) {
             console.error('Erro ao carregar frotas:', error);
             Alert.alert('Erro', 'Erro ao carregar frotas. Tente novamente.');
         } finally {
             setLoading(false);
+            setLoadingMore(false);
             setSearchingFrotas(false);
         }
     };
 
-    // Função de busca com debounce
     const debouncedSearch = (query: string) => {
         if (searchTimeout) {
             clearTimeout(searchTimeout);
         }
-        
+
         setSearchingFrotas(true);
         const timeout = setTimeout(() => {
             loadFrotas(true, query);
-        }, 500);
-        
+        }, 300);
+
         setSearchTimeout(timeout);
     };
 
@@ -211,6 +203,8 @@ export default function CheckIn() {
     const validateStep = () => {
         switch (currentStep) {
             case 1:
+                return true;
+            case 2:
                 return true;
             case 3:
                 if (!colaborador) {
@@ -338,114 +332,156 @@ export default function CheckIn() {
             case 1:
                 return (
                     <>
-                        <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-                            <View className="space-y-6 p-4">
-                                <View className="flex-row items-center space-x-2 mb-4">
-                                    <View className="w-8 h-8 rounded-full bg-[#004F9F] items-center justify-center">
-                                        <Icon name="wrench" size={16} color="white" />
-                                    </View>
-                                    <Text className="text-base font-semibold text-gray-900 ml-2">Normas e Procedimentos</Text>
-                                </View>
-
-                                <View className="space-y-3 gap-3">
-                                    <View className="bg-white p-4 rounded-lg border border-blue-100">
-                                        <View className="flex-row items-center space-x-2 mb-2">
-                                            <Icon name="car" size={16} color="#004F9F" />
-                                            <Text className="text-sm font-medium text-[#004F9F]">Uso do Veículo</Text>
-                                        </View>
-                                        <Text className="text-xs text-gray-600">
-                                            Veículos da empresa só podem ser utilizados para atividades relacionadas ao trabalho (NR-02, 5.1).
-                                        </Text>
-                                    </View>
-
-                                    <View className="bg-white p-4 rounded-lg border border-blue-100">
-                                        <View className="flex-row items-center space-x-2 mb-2">
-                                            <Icon name="close" size={16} color="#004F9F" />
-                                            <Text className="text-sm font-medium text-[#004F9F]">Limpeza</Text>
-                                        </View>
-                                        <Text className="text-xs text-gray-600">
-                                            É necessário recolher todo o lixo do veículo antes da devolução. Mantenha o veículo limpo e organizado.
-                                        </Text>
-                                    </View>
-
-                                    <View className="bg-white p-4 rounded-lg border border-blue-100">
-                                        <View className="flex-row items-center space-x-2 mb-2">
-                                            <Icon name="gas-station" size={16} color="#004F9F" />
-                                            <Text className="text-sm font-medium text-[#004F9F]">Combustível</Text>
-                                        </View>
-                                        <Text className="text-xs text-gray-600">
-                                            Ao devolver o veículo, certifique-se de que o tanque esteja com pelo menos metade da capacidade (1/2).
-                                        </Text>
-                                    </View>
-                                </View>
+                        <View className="items-center space-y-3 mb-8">
+                            <Text className="text-3xl font-bold text-gray-900 text-center">
+                                Check-in/Check-out
+                            </Text>
+                            <Text className="text-base text-gray-600 text-center">
+                                Leia as normas e procedimentos antes de prosseguir
+                            </Text>
+                            <View className="flex-row items-center bg-blue-50 px-4 py-2 rounded-full mt-2">
+                                <Icon name="information" size={20} color="#004F9F" />
+                                <Text className="text-blue-600 ml-2 font-medium">
+                                    Normas obrigatórias da empresa
+                                </Text>
                             </View>
-                        </ScrollView>
+                        </View>
+
+                        <View className="space-y-4 gap-3">
+                            <View className="bg-white p-4 rounded-xl border border-gray-200">
+                                <View className="flex-row items-center space-x-3 mb-3">
+                                    <View className="w-10 h-10 rounded-full bg-blue-50 items-center justify-center">
+                                        <Icon name="car" size={20} color="#004F9F" />
+                                    </View>
+                                    <Text className="text-lg font-semibold text-gray-900">Uso do Veículo</Text>
+                                </View>
+                                <Text className="text-gray-600 leading-5 pl-13">
+                                    Veículos da empresa só podem ser utilizados para atividades relacionadas ao trabalho (NR-02, 5.1).
+                                </Text>
+                            </View>
+
+                            <View className="bg-white p-4 rounded-xl border border-gray-200">
+                                <View className="flex-row items-center space-x-3 mb-3">
+                                    <View className="w-10 h-10 rounded-full bg-blue-50 items-center justify-center">
+                                        <Icon name="delete-sweep" size={20} color="#004F9F" />
+                                    </View>
+                                    <Text className="text-lg font-semibold text-gray-900">Limpeza</Text>
+                                </View>
+                                <Text className="text-gray-600 leading-5 pl-13">
+                                    É necessário recolher todo o lixo do veículo antes da devolução. Mantenha o veículo limpo e organizado.
+                                </Text>
+                            </View>
+
+                            <View className="bg-white p-4 rounded-xl border border-gray-200">
+                                <View className="flex-row items-center space-x-3 mb-3">
+                                    <View className="w-10 h-10 rounded-full bg-blue-50 items-center justify-center">
+                                        <Icon name="gas-station" size={20} color="#004F9F" />
+                                    </View>
+                                    <Text className="text-lg font-semibold text-gray-900">Combustível</Text>
+                                </View>
+                                <Text className="text-gray-600 leading-5 pl-13">
+                                    Ao devolver o veículo, certifique-se de que o tanque esteja com pelo menos metade da capacidade (1/2).
+                                </Text>
+                            </View>
+                        </View>
                     </>
                 );
 
             case 2:
                 return (
-                    <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-                        <View className="p-4">
-                            <Text className="text-xl font-semibold text-gray-900 mb-6">Escolha o tipo de registro</Text>
-                            <View className="gap-4">
-                                <TouchableOpacity
-                                    onPress={() => setTipoVistoria('retirada')}
-                                    className={`p-4 rounded-lg border-2 ${tipoVistoria === 'retirada'
-                                        ? 'border-[#004F9F] bg-blue-50'
-                                        : 'border-gray-200'
-                                        }`}
-                                >
-                                    <View className="items-center space-y-3">
-                                        <View className={`w-12 h-12 rounded-full items-center justify-center ${tipoVistoria === 'retirada' ? 'bg-[#004F9F]' : 'bg-gray-200'
-                                            }`}>
-                                            <Icon
-                                                name="car"
-                                                size={24}
-                                                color={tipoVistoria === 'retirada' ? 'white' : '#6B7280'}
-                                            />
-                                        </View>
-                                        <View className="items-center">
-                                            <Text className="font-medium text-gray-900 text-base">Check-in</Text>
-                                            <Text className="text-sm text-gray-500 mt-1">Vou retirar um veículo</Text>
-                                        </View>
-                                    </View>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    onPress={() => setTipoVistoria('devolucao')}
-                                    className={`p-4 rounded-lg border-2 ${tipoVistoria === 'devolucao'
-                                        ? 'border-[#004F9F] bg-blue-50'
-                                        : 'border-gray-200'
-                                        }`}
-                                >
-                                    <View className="items-center space-y-3">
-                                        <View className={`w-12 h-12 rounded-full items-center justify-center ${tipoVistoria === 'devolucao' ? 'bg-[#004F9F]' : 'bg-gray-200'}`}>
-                                            <Icon
-                                                name="car"
-                                                size={24}
-                                                color={tipoVistoria === 'devolucao' ? 'white' : '#6B7280'}
-                                            />
-                                        </View>
-                                        <View className="items-center">
-                                            <Text className="font-medium text-gray-900 text-base">Check-out</Text>
-                                            <Text className="text-sm text-gray-500 mt-1">Vou devolver um veículo</Text>
-                                        </View>
-                                    </View>
-                                </TouchableOpacity>
+                    <>
+                        <View className="items-center space-y-3 mb-4">
+                            <Text className="text-3xl font-bold text-gray-900 text-center">
+                                Tipo de Registro
+                            </Text>
+                            <Text className="text-base text-gray-600 text-center">
+                                Escolha se você está retirando ou devolvendo um veículo
+                            </Text>
+                            <View className="flex-row items-center bg-blue-50 px-4 py-2 rounded-full mt-2">
+                                <Icon name="swap-horizontal" size={20} color="#004F9F" />
+                                <Text className="text-blue-600 ml-2 font-medium">
+                                    Selecione uma opção
+                                </Text>
                             </View>
                         </View>
-                    </ScrollView>
+
+                        <View className="space-y-4 gap-3">
+                            <TouchableOpacity
+                                onPress={() => setTipoVistoria('retirada')}
+                                className={`bg-white rounded-xl border-2 p-6 ${tipoVistoria === 'retirada'
+                                    ? 'border-[#004F9F] bg-blue-50'
+                                    : 'border-gray-200'
+                                    }`}
+                            >
+                                <View className="flex-row items-center">
+                                    <View className={`w-16 h-16 rounded-full items-center justify-center mr-4 ${tipoVistoria === 'retirada' ? 'bg-[#004F9F]' : 'bg-gray-100'
+                                        }`}>
+                                        <Icon
+                                            name="car"
+                                            size={32}
+                                            color={tipoVistoria === 'retirada' ? 'white' : '#6B7280'}
+                                        />
+                                    </View>
+                                    <View className="flex-1">
+                                        <Text className="text-xl font-semibold text-gray-900 mb-1">Check-in</Text>
+                                        <Text className="text-gray-600">Vou retirar um veículo da frota</Text>
+                                    </View>
+                                    {tipoVistoria === 'retirada' && (
+                                        <Icon name="check-circle" size={24} color="#004F9F" />
+                                    )}
+                                </View>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                onPress={() => setTipoVistoria('devolucao')}
+                                className={`bg-white rounded-xl border-2 p-6 ${tipoVistoria === 'devolucao'
+                                    ? 'border-[#004F9F] bg-blue-50'
+                                    : 'border-gray-200'
+                                    }`}
+                            >
+                                <View className="flex-row items-center">
+                                    <View className={`w-16 h-16 rounded-full items-center justify-center mr-4 ${tipoVistoria === 'devolucao' ? 'bg-[#004F9F]' : 'bg-gray-100'
+                                        }`}>
+                                        <Icon
+                                            name="keyboard-return"
+                                            size={32}
+                                            color={tipoVistoria === 'devolucao' ? 'white' : '#6B7280'}
+                                        />
+                                    </View>
+                                    <View className="flex-1">
+                                        <Text className="text-xl font-semibold text-gray-900 mb-1">Check-out</Text>
+                                        <Text className="text-gray-600">Vou devolver um veículo da frota</Text>
+                                    </View>
+                                    {tipoVistoria === 'devolucao' && (
+                                        <Icon name="check-circle" size={24} color="#004F9F" />
+                                    )}
+                                </View>
+                            </TouchableOpacity>
+                        </View>
+                    </>
                 );
 
             case 3:
                 return (
-                    <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-                        <View className="p-4 space-y-4">
-                            <Text className="text-xl font-semibold text-gray-900 mb-4">Informações do Colaborador</Text>
+                    <>
+                        <View className="items-center space-y-3 mb-8">
+                            <Text className="text-3xl font-bold text-gray-900 text-center">
+                                Informações do Veículo
+                            </Text>
+                            <Text className="text-base text-gray-600 text-center">
+                                Preencha os dados do veículo para registrar o {tipoVistoria === 'retirada' ? 'check-in' : 'check-out'}
+                            </Text>
+                            <View className="flex-row items-center bg-blue-50 px-4 py-2 rounded-full mt-2">
+                                <Icon name="information" size={20} color="#004F9F" />
+                                <Text className="text-blue-600 ml-2 font-medium">
+                                    Digite sua matrícula para continuar
+                                </Text>
+                            </View>
+                        </View>
 
+                        <View className="space-y-4 mb-8 gap-3">
                             {/* Matrícula */}
-                            <View className="space-y-2">
+                            <View>
                                 <Text className="text-sm font-medium text-gray-700 mb-2">Matrícula</Text>
                                 <View className="flex-row items-center border border-gray-200 rounded-xl px-4 py-3 bg-white">
                                     <View className='w-10 h-10 rounded-full bg-blue-50 items-center justify-center mr-3'>
@@ -464,151 +500,338 @@ export default function CheckIn() {
                                         <ActivityIndicator size="small" color="#004F9F" />
                                     )}
                                 </View>
-                            </View>
-
-                            {/* Frota */}
-                            <View className="mb-4">
-                                <Text className="text-sm font-medium text-gray-700 mb-2">Frota</Text>
-                                <TouchableOpacity
-                                    onPress={() => {
-                                        setShowFrotaModal(true);
-                                        Keyboard.dismiss();
-                                    }}
-                                    className="flex-row items-center border border-gray-200 rounded-xl px-4 py-3 bg-white"
-                                    disabled={!exibindoNome || !colaborador}
-                                >
-                                    <View className="w-10 h-10 rounded-full bg-blue-50 items-center justify-center mr-3">
-                                        <Icon name="car" size={20} color="#004F9F" />
-                                    </View>
-                                    <View className="flex-1 justify-center min-h-[24px]">
-                                        <Text className={`text-base ${selectedVeiculo ? 'text-gray-900' : 'text-gray-400'}`}>
-                                            {selectedVeiculo ? `${selectedVeiculo.id}` : 'Selecione uma frota'}
+                                {exibindoNome && colaborador && (
+                                    <View className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                                        <View className="flex-row items-center">
+                                            <Icon name="check-circle" size={20} color="#10B981" />
+                                            <Text className="text-green-800 ml-2 font-medium">
+                                                {colaborador}
+                                            </Text>
+                                        </View>
+                                        <Text className="text-green-600 text-sm ml-6">
+                                            Matrícula: {matriculaDigitada}
                                         </Text>
-                                        {selectedVeiculo ? (
-                                            <Text className="text-sm text-gray-500">
-                                                {selectedVeiculo.placa} - {selectedVeiculo.modelo?.toUpperCase()}
-                                            </Text>
-                                        ) : (
-                                            <Text className="text-sm text-gray-500">
-                                                Toque para selecionar a frota
-                                            </Text>
-                                        )}
                                     </View>
-                                    <Icon name="chevron-down" size={24} color="#6B7280" />
-                                </TouchableOpacity>
+                                )}
                             </View>
 
-                            {/* Quilometragem */}
-                            <View className="space-y-2">
-                                <Text className="text-sm font-medium text-gray-700 mb-2">Quilometragem</Text>
-                                <View className="flex-row items-center border border-gray-200 rounded-xl px-4 py-3 bg-white">
-                                    <View className="w-10 h-10 rounded-full bg-blue-50 items-center justify-center mr-3">
-                                        <Icon name="speedometer" size={20} color="#004F9F" />
+                            {exibindoNome && (
+                                <>
+                                    {/* Frota */}
+                                    <View>
+                                        <Text className="text-sm font-medium text-gray-700 mb-2">Frota</Text>
+                                        <TouchableOpacity
+                                            onPress={() => {
+                                                setShowFrotaModal(true);
+                                                Keyboard.dismiss();
+                                            }}
+                                            className="flex-row items-center border border-gray-200 rounded-xl px-4 py-3 bg-white"
+                                        >
+                                            <View className="w-10 h-10 rounded-full bg-blue-50 items-center justify-center mr-3">
+                                                <Icon name="car" size={20} color="#004F9F" />
+                                            </View>
+                                            <View className="flex-1 justify-center min-h-[24px]">
+                                                <Text className={`text-base ${selectedVeiculo ? 'text-gray-900' : 'text-gray-400'}`}>
+                                                    {selectedVeiculo ? `${selectedVeiculo.id}` : 'Selecione uma frota'}
+                                                </Text>
+                                                {selectedVeiculo ? (
+                                                    <Text className="text-sm text-gray-500">
+                                                        {selectedVeiculo.placa} - {selectedVeiculo.modelo?.toUpperCase()}
+                                                    </Text>
+                                                ) : (
+                                                    <Text className="text-sm text-gray-500">
+                                                        Toque para selecionar a frota
+                                                    </Text>
+                                                )}
+                                            </View>
+                                            <Icon name="chevron-down" size={24} color="#6B7280" />
+                                        </TouchableOpacity>
                                     </View>
-                                    <TextInput
-                                        className="flex-1 p-3 text-base text-gray-900"
-                                        value={quilometragem}
-                                        onChangeText={setQuilometragem}
-                                        placeholder="Digite a quilometragem"
-                                        placeholderTextColor="#9CA3AF"
-                                        keyboardType="numeric"
-                                        editable={exibindoNome && !!colaborador}
-                                    />
-                                </View>
-                            </View>
+
+                                    {/* Quilometragem */}
+                                    <View>
+                                        <Text className="text-sm font-medium text-gray-700 mb-2">Quilometragem</Text>
+                                        <View className="flex-row items-center border border-gray-200 rounded-xl px-4 py-3 bg-white">
+                                            <View className="w-10 h-10 rounded-full bg-blue-50 items-center justify-center mr-3">
+                                                <Icon name="speedometer" size={20} color="#004F9F" />
+                                            </View>
+                                            <TextInput
+                                                className="flex-1 text-base text-gray-900"
+                                                value={quilometragem}
+                                                onChangeText={setQuilometragem}
+                                                placeholder="Digite a quilometragem atual"
+                                                placeholderTextColor="#9CA3AF"
+                                                keyboardType="numeric"
+                                                onFocus={() => {
+                                                    setTimeout(() => {
+                                                        scrollViewRef.current?.scrollToEnd({ animated: true });
+                                                    }, 300);
+                                                }}
+                                            />
+                                            <Text className="text-gray-500 ml-2">km</Text>
+                                        </View>
+                                    </View>
+                                </>
+                            )}
                         </View>
-                    </ScrollView>
+                    </>
                 );
 
             case 4:
                 return (
-                    <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-                        <View className="p-4 space-y-6">
-                            <Text className="text-xl font-semibold text-gray-900 mb-4">Estado do Veículo</Text>
-
-                            {/* Combustível */}
-                            <View className="space-y-2">
-                                <Text className="text-sm font-medium text-gray-700">
-                                    Nível de Combustível <Text className="text-red-500">*</Text>
+                    <>
+                        <View className="items-center space-y-3 mb-8">
+                            <Text className="text-3xl font-bold text-gray-900 text-center">
+                                Estado do Veículo
+                            </Text>
+                            <Text className="text-base text-gray-600 text-center">
+                                Avalie o estado atual do veículo selecionado
+                            </Text>
+                            <View className="flex-row items-center bg-blue-50 px-4 py-2 rounded-full mt-2">
+                                <Icon name="clipboard-check" size={20} color="#004F9F" />
+                                <Text className="text-blue-600 ml-2 font-medium">
+                                    {selectedVeiculo?.id} | {selectedVeiculo?.placa} - {selectedVeiculo?.modelo}
                                 </Text>
-                                <View className="flex-row justify-between">
-                                    {(['vazio', '1/4', '1/2', '3/4', 'cheio'] as const).map((nivel) => (
-                                        <TouchableOpacity
-                                            key={nivel}
-                                            onPress={() => setCombustivel(nivel)}
-                                            className={`flex-1 mx-1 p-3 rounded-lg border-2 ${combustivel === nivel
-                                                ? 'border-blue-600 bg-blue-50'
-                                                : 'border-gray-200'
-                                                }`}
-                                        >
-                                            <View className="items-center space-y-1">
-                                                <Icon
-                                                    name="gas-station"
-                                                    size={20}
-                                                    color={combustivel === nivel ? '#004F9F' : '#9CA3AF'}
-                                                />
-                                                <Text className={`text-xs font-medium ${combustivel === nivel ? 'text-blue-600' : 'text-gray-900'
-                                                    }`}>
-                                                    {nivel}
-                                                </Text>
-                                            </View>
-                                        </TouchableOpacity>
-                                    ))}
+                            </View>
+                        </View>
+
+                        <View className="space-y-6 gap-3">
+                            {/* Combustível */}
+                            <View>
+                                <View className="flex-row items-center mb-2">
+                                    <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center mr-3">
+                                        <Icon name="gas-station" size={20} color="#004F9F" />
+                                    </View>
+                                    <Text className="text-xl font-bold text-gray-900">Nível de Combustível</Text>
+                                    <Text className="text-red-500 ml-2 text-lg">*</Text>
+                                </View>
+
+                                <Text className="text-gray-600 mb-6 leading-relaxed text-base">
+                                    Selecione o nível atual de combustível do veículo
+                                </Text>
+
+                                <View className="flex-row justify-between gap-2">
+                                    {(['vazio', '1/4', '1/2', '3/4', 'cheio'] as const).map((nivel, index) => {
+                                        const getFuelColor = () => {
+                                            switch (nivel) {
+                                                case 'vazio': return '#EF4444';
+                                                case '1/4': return '#F59E0B';
+                                                case '1/2': return '#F59E0B';
+                                                case '3/4': return '#10B981';
+                                                case 'cheio': return '#059669';
+                                                default: return '#9CA3AF';
+                                            }
+                                        };
+
+                                        const isSelected = combustivel === nivel;
+
+                                        return (
+                                            <TouchableOpacity
+                                                key={nivel}
+                                                onPress={() => setCombustivel(nivel)}
+                                                activeOpacity={0.7}
+                                                className={`flex-1 p-3 rounded-xl border min-h-[110px] ${isSelected
+                                                    ? 'border-[#004F9F] bg-white'
+                                                    : 'border-gray-200 bg-white'
+                                                    }`}
+                                            >
+                                                <View className="items-center justify-between flex-1 py-1">
+                                                    {/* Fuel gauge visual - maior e mais visível */}
+                                                    <View className="w-10 h-14 border-2 border-gray-300 rounded-lg relative overflow-hidden bg-gray-50">
+                                                        <View
+                                                            className="absolute bottom-0 left-0 right-0 rounded-b-md transition-all"
+                                                            style={{
+                                                                height: `${(index + 1) * 20}%`,
+                                                                backgroundColor: isSelected ? getFuelColor() : '#E5E7EB'
+                                                            }}
+                                                        />
+                                                        {/* Fuel pump icon inside gauge */}
+                                                        <View className="absolute inset-0 items-center justify-center">
+                                                            <Icon
+                                                                name="gas-station"
+                                                                size={12}
+                                                                color={isSelected ? 'white' : '#9CA3AF'}
+                                                            />
+                                                        </View>
+                                                    </View>
+
+                                                    {/* Main icon circle - menor para economizar espaço */}
+                                                    <View className={`w-10 h-10 rounded-full items-center justify-center my-2 ${isSelected ? 'bg-[#004F9F]' : 'bg-gray-200'
+                                                        }`}>
+                                                        <Icon
+                                                            name="fuel"
+                                                            size={16}
+                                                            color={isSelected ? 'white' : '#9CA3AF'}
+                                                        />
+                                                    </View>
+
+                                                    {/* Label with better spacing */}
+                                                    <Text className={`text-xs font-bold text-center leading-tight ${isSelected ? 'text-[#004F9F]' : 'text-gray-600'
+                                                        }`}>
+                                                        {nivel}
+                                                    </Text>
+
+                                                    {/* Check badge - posicionado melhor */}
+                                                    {isSelected && (
+                                                        <View className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full items-center justify-center">
+                                                            <Icon name="check" size={12} color="white" />
+                                                        </View>
+                                                    )}
+                                                </View>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
                                 </View>
                             </View>
 
                             {/* Estado Geral */}
-                            <View className="space-y-2">
-                                <Text className="text-sm font-medium text-gray-700">
-                                    Estado Geral <Text className="text-red-500">*</Text>
+                            <View>
+                                <View className="flex-row items-center mb-2">
+                                    <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center mr-3">
+                                        <Icon name="clipboard-check" size={20} color="#004F9F" />
+                                    </View>
+                                    <Text className="text-xl font-bold text-gray-900">Estado Geral</Text>
+                                    <Text className="text-red-500 ml-2 text-lg">*</Text>
+                                </View>
+
+                                <Text className="text-gray-600 mb-4 leading-relaxed">
+                                    Avalie o estado geral do veículo
                                 </Text>
-                                <View className="flex-row justify-between">
-                                    {(['ruim', 'regular', 'bom', 'otimo'] as const).map((estado) => (
-                                        <TouchableOpacity
-                                            key={estado}
-                                            onPress={() => setEstadoGeral(estado)}
-                                            className={`flex-1 mx-1 p-3 rounded-lg border-2 ${estadoGeral === estado
-                                                ? 'border-blue-600 bg-blue-50'
-                                                : 'border-gray-200'
-                                                }`}
-                                        >
-                                            <View className="items-center space-y-1">
-                                                <Icon
-                                                    name="wrench"
-                                                    size={20}
-                                                    color={estadoGeral === estado ? '#004F9F' : '#9CA3AF'}
-                                                />
-                                                <Text className={`text-xs font-medium ${estadoGeral === estado ? 'text-blue-600' : 'text-gray-900'
-                                                    }`}>
-                                                    {estado}
-                                                </Text>
-                                            </View>
-                                        </TouchableOpacity>
-                                    ))}
+
+                                {/* Grid Layout 2x2 */}
+                                <View className="flex-row flex-wrap gap-3">
+                                    {(['ruim', 'regular', 'bom', 'otimo'] as const).map((estado, index) => {
+                                        const getEstadoColor = () => {
+                                            switch (estado) {
+                                                case 'ruim': return '#EF4444';
+                                                case 'regular': return '#F59E0B';
+                                                case 'bom': return '#10B981';
+                                                case 'otimo': return '#059669';
+                                                default: return '#9CA3AF';
+                                            }
+                                        };
+
+                                        const getEstadoIcon = () => {
+                                            switch (estado) {
+                                                case 'ruim': return 'close-circle';
+                                                case 'regular': return 'alert-circle';
+                                                case 'bom': return 'check-circle';
+                                                case 'otimo': return 'star-circle';
+                                                default: return 'help-circle';
+                                            }
+                                        };
+
+                                        const getEstadoText = () => {
+                                            switch (estado) {
+                                                case 'ruim': return 'Problemas visíveis';
+                                                case 'regular': return 'Pequenos desgastes';
+                                                case 'bom': return 'Boas condições';
+                                                case 'otimo': return 'Excelente estado';
+                                                default: return '';
+                                            }
+                                        };
+
+                                        const isSelected = estadoGeral === estado;
+                                        const estadoColor = getEstadoColor();
+
+                                        return (
+                                            <TouchableOpacity
+                                                key={estado}
+                                                onPress={() => setEstadoGeral(estado)}
+                                                activeOpacity={0.7}
+                                                className={`bg-white rounded-xl border p-4 min-h-[85px] ${isSelected
+                                                    ? 'border-[#004F9F]'
+                                                    : 'border-gray-200'
+                                                    }`}
+                                                style={{
+                                                    width: '48%', // Cada card ocupa quase metade da largura
+                                                }}
+                                            >
+                                                <View className="items-center justify-center flex-1">
+                                                    {/* Status indicator - centralizado e compacto */}
+                                                    <View className="relative mb-2">
+                                                        <View className={`w-10 h-10 rounded-full items-center justify-center ${isSelected ? 'bg-[#004F9F]' : 'bg-gray-100'
+                                                            }`}>
+                                                            <Icon
+                                                                name={getEstadoIcon()}
+                                                                size={18}
+                                                                color={isSelected ? 'white' : estadoColor}
+                                                            />
+                                                        </View>
+
+                                                        {/* Color dot indicator */}
+                                                        <View
+                                                            className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border border-white"
+                                                            style={{ backgroundColor: estadoColor }}
+                                                        />
+
+                                                        {isSelected && (
+                                                            <View className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full items-center justify-center">
+                                                                <Icon name="check" size={10} color="white" />
+                                                            </View>
+                                                        )}
+                                                    </View>
+
+                                                    {/* Texto centralizado */}
+                                                    <Text className={`text-sm font-bold capitalize text-center mb-1 ${isSelected ? 'text-[#004F9F]' : 'text-gray-900'
+                                                        }`}>
+                                                        {estado}
+                                                    </Text>
+
+                                                    <Text className="text-xs text-gray-600 text-center leading-tight">
+                                                        {getEstadoText()}
+                                                    </Text>
+                                                </View>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
                                 </View>
                             </View>
 
                             {/* Observações */}
-                            <View className="space-y-2">
-                                <View className="flex-row items-center">
-                                    <Text className="text-sm font-medium text-gray-700">Observações</Text>
-                                    <View className="ml-2 px-2 py-1 bg-gray-100 rounded-full">
+                            <View>
+                                <View className="flex-row items-center mb-3">
+                                    <Text className="text-lg font-semibold text-gray-900">Observações</Text>
+                                    <View className="ml-3 px-3 py-1 bg-gray-100 rounded-full">
                                         <Text className="text-xs font-medium text-gray-600">Opcional</Text>
                                     </View>
                                 </View>
-                                <TextInput
-                                    className="bg-gray-50 rounded-lg border border-gray-300 p-3 text-base text-gray-900"
-                                    value={observacoes}
-                                    onChangeText={setObservacoes}
-                                    placeholder="Digite suas observações sobre o veículo..."
-                                    placeholderTextColor="#9CA3AF"
-                                    multiline
-                                    numberOfLines={3}
-                                    textAlignVertical="top"
-                                />
+                                <View className="bg-white rounded-xl border border-gray-200 p-4 mb-16">
+                                    <View className="flex-row items-start">
+                                        <View className="w-10 h-10 rounded-full bg-blue-50 items-center justify-center mr-3 mt-1">
+                                            <Icon name="note-text" size={20} color="#004F9F" />
+                                        </View>
+                                        <View className="flex-1">
+                                            <TextInput
+                                                className="text-base text-gray-900 min-h-[80px]"
+                                                value={observacoes}
+                                                onChangeText={(text) => {
+                                                    if (text.length <= 500) {
+                                                        setObservacoes(text);
+                                                    }
+                                                }}
+                                                placeholder="Descreva qualquer detalhe importante sobre o veículo, como arranhões, problemas mecânicos ou outras observações relevantes..."
+                                                placeholderTextColor="#9CA3AF"
+                                                multiline
+                                                textAlignVertical="top"
+                                                maxLength={500}
+                                            />
+                                            <View className="flex-row justify-between items-center mt-2 pt-2 border-t border-gray-100">
+                                                <Text className="text-xs text-gray-500">
+                                                    {observacoes.length}/500 caracteres
+                                                </Text>
+                                                {observacoes.length > 0 && (
+                                                    <TouchableOpacity onPress={() => setObservacoes('')}>
+                                                        <Text className="text-xs text-blue-600">Limpar</Text>
+                                                    </TouchableOpacity>
+                                                )}
+                                            </View>
+                                        </View>
+                                    </View>
+                                </View>
                             </View>
                         </View>
-                    </ScrollView>
+                    </>
                 );
 
             default:
@@ -618,77 +841,105 @@ export default function CheckIn() {
 
     return (
         <View className="flex-1 bg-white">
-            {/* Header */}
-            <View style={{ paddingTop: 18 + insets.top }} className="px-6 pb-4 border-b border-gray-200">
-                <View className="flex-row items-center justify-between mb-4">
-                    <TouchableOpacity onPress={() => setCurrentStep(0)} className="w-8">
-                        <Icon name="chevron-left" size={24} color="#6B7280" />
-                    </TouchableOpacity>
-                    <View className="items-center">
-                        <Text className="text-xl font-semibold text-gray-900">Check-in/out</Text>
-                        <Text className="text-sm text-gray-500">Passo {currentStep} de 4</Text>
+            <KeyboardAvoidingView
+                style={{ flex: 1 }}
+                behavior={Platform.OS === "ios" ? "padding" : "height"}
+                keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
+            >
+                <ScrollView
+                    contentContainerStyle={{
+                        paddingHorizontal: 24,
+                        paddingTop: 18 + insets.top,
+                    }}
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
+                >
+                    {/* Header */}
+                    <View className="flex-row items-center justify-between mb-6">
+                        <TouchableOpacity onPress={() => setCurrentStep(0)} className="w-8">
+                            <Icon name="chevron-left" size={24} color="#6B7280" />
+                        </TouchableOpacity>
+                        <View className="absolute left-1/2 -translate-x-1/2">
+                            <StepIndicator currentStep={currentStep} totalSteps={4} />
+                        </View>
                     </View>
-                    <View className="w-8" />
-                </View>
 
-                {/* Progress Bar */}
-                <View className="w-full bg-gray-200 rounded-full h-2">
-                    <View
-                        className="bg-[#004F9F] h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${(currentStep / 4) * 100}%` }}
-                    />
-                </View>
-            </View>
-
-            {/* Content */}
-            <View className="flex-1">
-                {renderStep()}
-            </View>
+                    {renderStep()}
+                </ScrollView>
+            </KeyboardAvoidingView>
 
             {!success && (
-                <View
-                    className="bg-white border-t border-gray-200 p-4"
-                    style={{ paddingBottom: insets.bottom + 16 }}
-                >
-                    <View className={`flex-row gap-2 ${currentStep === 1 ? 'justify-center' : 'justify-between'}`}>
+                <View style={{ position: 'absolute', bottom: insets.bottom + 16, left: 24, right: 24 }}>
+                    <View className="flex-row gap-3">
                         {currentStep > 1 && (
                             <TouchableOpacity
                                 onPress={() => setCurrentCheckStep(currentStep - 1)}
-                                className="flex-1 flex-row items-center justify-center "
+                                className="flex-1 bg-gray-100 border border-gray-200 rounded-xl py-4 px-6 flex-row items-center justify-center min-h-[52px]"
                             >
-                                <Icon name="chevron-left" size={16} color="#6B7280" />
-                                <Text className="text-gray-600">Voltar</Text>
+                                <Icon name="chevron-left" size={20} color="#6B7280" />
+                                <Text className="text-gray-600 font-medium ml-2">Voltar</Text>
                             </TouchableOpacity>
                         )}
 
                         {currentStep === 1 ? (
-                            <TouchableOpacity
-                                onPress={handleNextStep}
-                                className="w-full justify-center items-center px-6 py-3 bg-[#004F9F] rounded-lg font-medium hover:bg-[#003F7F] transition-colors"
+                            <LinearGradient
+                                colors={['#004F9F', '#009FE3']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={{ borderRadius: 12, flex: 1 }}
                             >
-                                <Text className="text-white font-medium mr-2">Iniciar</Text>
-                                <Icon name="chevron-right" size={16} color="white" />
-                            </TouchableOpacity>
+                                <TouchableOpacity
+                                    onPress={handleNextStep}
+                                    activeOpacity={0.8}
+                                    className="py-4 px-6 flex-row items-center justify-center min-h-[52px]"
+                                >
+                                    <Text className="text-white text-lg font-semibold mr-2">Iniciar</Text>
+                                    <Icon name="chevron-right" size={20} color="white" />
+                                </TouchableOpacity>
+                            </LinearGradient>
                         ) : currentStep < 4 ? (
-                            <TouchableOpacity
-                                onPress={handleNextStep}
-                                className="flex-1 justify-center items-center bg-[#004F9F] px-6 py-3 rounded-lg flex-row text-white font-medium hover:bg-[#003F7F] transition-colors"
+                            <LinearGradient
+                                colors={['#004F9F', '#009FE3']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={{ borderRadius: 12, flex: currentStep > 1 ? 2 : 1 }}
                             >
-                                <Text className="text-white font-medium mr-2">Próximo</Text>
-                                <Icon name="chevron-right" size={16} color="white" />
-                            </TouchableOpacity>
+                                <TouchableOpacity
+                                    onPress={handleNextStep}
+                                    activeOpacity={0.8}
+                                    className="py-4 px-6 flex-row items-center justify-center min-h-[52px]"
+                                >
+                                    <Text className="text-white text-lg font-semibold mr-2">Próximo</Text>
+                                    <Icon name="chevron-right" size={20} color="white" />
+                                </TouchableOpacity>
+                            </LinearGradient>
                         ) : (
-                            <TouchableOpacity
-                                onPress={handleSubmit}
-                                disabled={loading}
-                                className={`flex-1 justify-center items-center bg-[#004F9F] px-6 py-3 rounded-lg flex-row ${loading ? 'opacity-50' : ''}`}
+                            <LinearGradient
+                                colors={['#10B981', '#059669']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={{ borderRadius: 12, flex: 2, opacity: loading ? 0.7 : 1 }}
                             >
-                                {loading ? (
-                                    <ActivityIndicator size="small" color="white" />
-                                ) : (
-                                    <Text className="text-white font-medium">Finalizar</Text>
-                                )}
-                            </TouchableOpacity>
+                                <TouchableOpacity
+                                    onPress={handleSubmit}
+                                    disabled={loading}
+                                    activeOpacity={0.8}
+                                    className="py-4 px-6 flex-row items-center justify-center min-h-[52px]"
+                                >
+                                    {loading ? (
+                                        <>
+                                            <ActivityIndicator size="small" color="white" />
+                                            <Text className="text-white text-lg font-semibold ml-2">Salvando...</Text>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Text className="text-white text-lg font-semibold mr-2">Finalizar</Text>
+                                            <Icon name="check-circle" size={20} color="white" />
+                                        </>
+                                    )}
+                                </TouchableOpacity>
+                            </LinearGradient>
                         )}
                     </View>
                 </View>
@@ -718,7 +969,7 @@ export default function CheckIn() {
                         </View>
 
                         <View className="flex-row items-center border border-gray-200 rounded-xl px-4 py-3 bg-white mb-4">
-                            <Icon name="search" size={20} color="#6B7280" style={{ marginRight: 12 }} />
+                            <Icon name="magnify" size={20} color="#6B7280" style={{ marginRight: 12 }} />
                             <TextInput
                                 className="flex-1 text-base text-gray-900"
                                 placeholder="Pesquisar por frota, modelo ou placa..."
@@ -741,50 +992,51 @@ export default function CheckIn() {
                             )}
                         </View>
 
-                        {searchingFrotas ? (
-                            <View className="items-center py-8">
-                                <ActivityIndicator size="large" color="#004F9F" />
-                                <Text className="text-gray-500 mt-2">Pesquisando...</Text>
-                            </View>
-                        ) : (
-                            <FlatList
-                                data={frotas}
-                                keyExtractor={(item, index) => item.id.toString()}
-                                renderItem={({ item }) => (
-                                    <TouchableOpacity
-                                        onPress={() => {
-                                            setSelectedVeiculo(item);
-                                            setShowFrotaModal(false);
-                                            setSearchQuery('');
-                                            Keyboard.dismiss();
-                                        }}
-                                        className="py-4 border-b border-gray-100"
-                                    >
-                                        <View className="flex-row items-center justify-between">
-                                            <View>
-                                                <Text className="text-base font-medium text-gray-900">
-                                                    {item.id} - {item.modelo.toUpperCase()}
-                                                </Text>
-                                                <Text className="text-sm text-gray-500">{item.placa}</Text>
-                                            </View>
-                                            {selectedVeiculo?.id === item.id && <Icon name="check-circle" size={24} color="#10B981" />}
+                        <FlatList
+                            data={frotas}
+                            keyExtractor={(item, index) => item.id.toString()}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        setSelectedVeiculo(item);
+                                        setShowFrotaModal(false);
+                                        setSearchQuery('');
+                                        Keyboard.dismiss();
+                                    }}
+                                    className="py-4 border-b border-gray-100"
+                                >
+                                    <View className="flex-row items-center justify-between">
+                                        <View>
+                                            <Text className="text-base font-medium text-gray-900">
+                                                {item.id} - {item.modelo.toUpperCase()}
+                                            </Text>
+                                            <Text className="text-sm text-gray-500">{item.placa}</Text>
                                         </View>
-                                    </TouchableOpacity>
-                                )}
-                                ListEmptyComponent={
-                                    <View className="items-center py-8">
-                                        <Icon name="car-off" size={48} color="#9CA3AF" />
-                                        <Text className="text-center text-gray-500 mt-2">
-                                            {searchQuery ? 'Nenhuma frota encontrada para a pesquisa' : 'Nenhuma frota disponível'}
-                                        </Text>
+                                        {selectedVeiculo?.id === item.id && <Icon name="check-circle" size={24} color="#10B981" />}
                                     </View>
-                                }
-                                keyboardShouldPersistTaps="handled"
-                                keyboardDismissMode="none"
-                                onEndReached={() => { if (hasMore && !searchingFrotas) loadFrotas(false, searchQuery); }}
-                                onEndReachedThreshold={0.3}
-                            />
-                        )}
+                                </TouchableOpacity>
+                            )}
+                            ListEmptyComponent={
+                                <View className="items-center py-8">
+                                    <Icon name="car-off" size={48} color="#9CA3AF" />
+                                    <Text className="text-center text-gray-500 mt-2">
+                                        {searchQuery ? 'Nenhuma frota encontrada para a pesquisa' : 'Nenhuma frota disponível'}
+                                    </Text>
+                                </View>
+                            }
+                            keyboardShouldPersistTaps="handled"
+                            keyboardDismissMode="none"
+                            onEndReached={() => { if (hasMore && !searchingFrotas) loadFrotas(false, searchQuery); }}
+                            onEndReachedThreshold={0.3}
+                            ListFooterComponent={() =>
+                                loadingMore ? (
+                                    <View className="py-4 items-center">
+                                        <ActivityIndicator size="small" color="#004F9F" />
+                                        <Text className="text-gray-500 mt-2 text-sm">Carregando mais...</Text>
+                                    </View>
+                                ) : null
+                            }
+                        />
                     </TouchableOpacity>
                 </View>
             </Modal>
